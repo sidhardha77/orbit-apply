@@ -22,9 +22,10 @@
           <button class="nav-item" data-view="answers"><span>◎</span> Application answers</button>
           <button class="nav-item" data-view="settings"><span>⚙</span> Connections</button>
         </nav>
-        <section class="profile-mini">
-          <div class="avatar">KS</div><div><strong>Kovvuru Sidhardha</strong><small>AI graduate · NITK</small></div>
-        </section>
+        <button class="profile-mini" id="profileMiniButton" data-view="settings" type="button" aria-label="Open profile settings">
+          <div class="avatar" id="profileAvatar">KS</div>
+          <div><strong id="profileMiniName">Kovvuru Sidhardha</strong><small id="profileMiniMeta">AI graduate · NITK</small></div>
+        </button>
       </aside>
 
       <section class="content">
@@ -33,28 +34,91 @@
           <div class="top-actions"><button class="icon-button" aria-label="Notifications">♢<span class="dot"></span></button><button class="secondary" id="searchNow">Search now <span>↗</span></button></div>
         </header>
 
-        <section class="hero-card tilt-card">
-          <div class="grid-glow"></div>
-          <div class="hero-copy"><p class="pill"><span></span> Automation is ready</p><h2>Find. Review. Apply.<br><em>Always on your terms.</em></h2><p>Your daily shortlist is built for Bengaluru, hybrid, remote and paid internship roles in AI, ML and data.</p><div class="hero-actions"><button class="primary" data-view="queue">Review 9 openings <span>→</span></button><button class="text-button" data-view="answers">Edit profile answers</button></div></div>
-          <div class="orbital-scene" aria-hidden="true"><div class="planet"></div><div class="orbit orbit-a"><i></i></div><div class="orbit orbit-b"><i></i></div><div class="orbit orbit-c"><i></i></div><div class="orbital-label label-a">9 NEW</div><div class="orbital-label label-b">AI / ML</div></div>
+        <!-- DASHBOARD VIEW -->
+        <section class="view active" id="view-dashboard" data-view-panel="dashboard">
+          <section class="hero-card tilt-card">
+            <div class="grid-glow"></div>
+            <div class="hero-copy"><p class="pill"><span></span> Automation is ready</p><h2>Find. Review. Apply.<br><em>Always on your terms.</em></h2><p>Your daily shortlist is built for <span id="heroLocation">Bengaluru</span>, hybrid, remote and paid internship roles in AI, ML and data.</p><div class="hero-actions"><button class="primary" data-view="queue">Review <span id="heroQueueCount">9</span> openings <span>→</span></button><button class="text-button" data-view="answers">Edit profile answers</button></div></div>
+            <div class="orbital-scene" id="orbitalScene" aria-hidden="true"><div class="orbital-inner"><div class="planet"></div><div class="orbit orbit-a"><i></i></div><div class="orbit orbit-b"><i></i></div><div class="orbit orbit-c"><i></i></div><div class="orbital-label label-a">9 NEW</div><div class="orbital-label label-b">AI / ML</div></div></div>
+          </section>
+
+          <section class="metrics" aria-label="Daily job metrics">
+            <article><span class="metric-icon mint">✦</span><div><strong id="metricFresh">9</strong><p>Fresh matches</p></div><small>Today</small></article>
+            <article><span class="metric-icon violet">◌</span><div><strong>7.8</strong><p>Average fit</p></div><small>/ 10</small></article>
+            <article><span class="metric-icon amber">↗</span><div><strong id="metricApplied">0</strong><p>Applied today</p></div><small>Pending review</small></article>
+          </section>
+
+          <section class="split">
+            <article class="panel pipeline"><div class="panel-head"><div><p class="eyebrow">TODAY'S PIPELINE</p><h2>What happens next</h2></div><button class="link-button" data-view="queue">Open queue →</button></div>
+              <ol><li class="done"><span>✓</span><div><strong>Search and verify</strong><p>Fresh roles checked against your filters.</p></div><time>Complete</time></li><li class="current"><span>2</span><div><strong>Your approval</strong><p>Pick the roles you want us to apply to.</p></div><time>Now</time></li><li><span>3</span><div><strong>Guided submission</strong><p>We fill approved forms and pause for unclear questions.</p></div><time>Then</time></li></ol>
+            </article>
+            <article class="panel profile-card"><div class="panel-head"><div><p class="eyebrow">APPLICATION PROFILE</p><h2>Ready to fill</h2></div><span class="status"><i></i> <span id="profileCompletePct">86</span>% complete</span></div><div class="profile-progress"><i id="profileProgressBar"></i></div><div class="profile-list" id="profileChecklist"></div><button class="secondary full" data-view="settings">Complete profile</button></article>
+          </section>
         </section>
 
-        <section class="metrics" aria-label="Daily job metrics">
-          <article><span class="metric-icon mint">✦</span><div><strong>9</strong><p>Fresh matches</p></div><small>Today</small></article>
-          <article><span class="metric-icon violet">◌</span><div><strong>7.8</strong><p>Average fit</p></div><small>/ 10</small></article>
-          <article><span class="metric-icon amber">↗</span><div><strong>0</strong><p>Applied today</p></div><small>Pending review</small></article>
+        <!-- REVIEW QUEUE VIEW -->
+        <section class="view" id="view-queue" data-view-panel="queue">
+          <header class="view-head"><div><p class="eyebrow">REVIEW QUEUE</p><h1>Pick what we apply to</h1><p class="view-sub">Select roles below, then approve. Nothing gets submitted until you tap Apply.</p></div></header>
+
+          <div class="filter-bar" role="group" aria-label="Filter openings">
+            <label>Location<select id="filterLocation"><option value="any">Any location</option><option value="bengaluru">Bengaluru</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="pan-india">Pan-India</option></select></label>
+            <label>Experience<select id="filterExperience"><option value="any">Any level</option><option value="internship">Internship</option><option value="fresher">Fresher (0 yrs)</option><option value="0-2">0–2 years</option><option value="2-5">2–5 years</option></select></label>
+            <label>Search<input id="filterKeyword" type="text" placeholder="e.g. RAG, computer vision" maxlength="60" /></label>
+            <button class="secondary" id="selectAllQueue" type="button">Select all</button>
+          </div>
+
+          <div class="queue-list" id="queueList" aria-live="polite"></div>
+
+          <div class="queue-actionbar">
+            <span id="queueSelectedCount">0 selected</span>
+            <button class="primary" id="applySelected" type="button">Apply to selected <span>→</span></button>
+          </div>
         </section>
 
-        <section class="split">
-          <article class="panel pipeline"><div class="panel-head"><div><p class="eyebrow">TODAY'S PIPELINE</p><h2>What happens next</h2></div><button class="link-button" data-view="queue">Open queue →</button></div>
-            <ol><li class="done"><span>✓</span><div><strong>Search and verify</strong><p>Fresh roles checked against your filters.</p></div><time>Complete</time></li><li class="current"><span>2</span><div><strong>Your approval</strong><p>Pick the roles you want us to apply to.</p></div><time>Now</time></li><li><span>3</span><div><strong>Guided submission</strong><p>We fill approved forms and pause for unclear questions.</p></div><time>Then</time></li></ol>
+        <!-- APPLICATION ANSWERS VIEW -->
+        <section class="view" id="view-answers" data-view-panel="answers">
+          <header class="view-head"><div><p class="eyebrow">APPLICATION ANSWERS</p><h1>Your auto-answer bank</h1><p class="view-sub">These answers get reused to pre-fill common application questions. Edit anything, then Save — changes apply everywhere automatically.</p></div><span class="status" id="answersReadyStatus"><i></i> 0 of 0 ready</span></header>
+
+          <div class="answers-list" id="answersList"></div>
+
+          <div class="queue-actionbar">
+            <span id="answersSavedNote">Not saved yet</span>
+            <button class="primary" id="saveAnswers" type="button">Save answer bank</button>
+          </div>
+        </section>
+
+        <!-- SETTINGS / CONNECTIONS / PROFILE VIEW -->
+        <section class="view" id="view-settings" data-view-panel="settings">
+          <header class="view-head"><div><p class="eyebrow">PROFILE & CONNECTIONS</p><h1>Set up your profile</h1><p class="view-sub">This is what the filters and auto-fill use. Everything here is editable — tap any field.</p></div></header>
+
+          <form class="panel settings-form" id="profileForm">
+            <div class="form-grid">
+              <label>Full name<input id="fieldName" type="text" maxlength="60" required /></label>
+              <label>Headline<input id="fieldHeadline" type="text" maxlength="80" placeholder="e.g. AI graduate · NITK" /></label>
+              <label>Base location<select id="fieldLocation"><option value="bengaluru">Bengaluru</option><option value="remote">Remote-only</option><option value="hybrid">Hybrid</option><option value="pan-india">Open to Pan-India</option></select></label>
+              <label>Experience level<select id="fieldExperience"><option value="internship">Internship</option><option value="fresher">Fresher (0 yrs)</option><option value="0-2">0–2 years</option><option value="2-5">2–5 years</option></select></label>
+              <label>Minimum salary (LPA)<input id="fieldSalary" type="number" min="0" step="0.5" /></label>
+              <label>Resume link<input id="fieldResume" type="url" placeholder="https://…" /></label>
+              <label class="span-2">Portfolio / project link<input id="fieldPortfolio" type="url" placeholder="https://…" /></label>
+              <label class="span-2">Skills (comma separated)<input id="fieldSkills" type="text" placeholder="Python, YOLO, XGBoost, RAG, LLMs" /></label>
+            </div>
+            <button class="primary" type="submit">Save profile</button>
+            <span class="save-note" id="profileSaveNote"></span>
+          </form>
+
+          <article class="panel connections-panel">
+            <div class="panel-head"><div><p class="eyebrow">SOURCES</p><h2>Connections</h2></div></div>
+            <div class="connection-row" data-source="linkedin"><div><strong>LinkedIn</strong><small>Search + apply on your behalf</small></div><button class="toggle" type="button" role="switch" aria-checked="false"><i></i></button></div>
+            <div class="connection-row" data-source="naukri"><div><strong>Naukri</strong><small>Search + apply on your behalf</small></div><button class="toggle" type="button" role="switch" aria-checked="false"><i></i></button></div>
+            <div class="connection-row" data-source="indeed"><div><strong>Indeed</strong><small>Search + apply on your behalf</small></div><button class="toggle" type="button" role="switch" aria-checked="false"><i></i></button></div>
+            <div class="connection-row" data-source="whatsapp"><div><strong>WhatsApp digest</strong><small>Daily shortlist + approvals by reply</small></div><button class="toggle" type="button" role="switch" aria-checked="false"><i></i></button></div>
+            <p class="connections-note">Connecting a source here only sets the toggle for now — sign-in and real submission need an authorised backend. Nothing is submitted anywhere without your approval in the Review queue.</p>
           </article>
-          <article class="panel profile-card"><div class="panel-head"><div><p class="eyebrow">APPLICATION PROFILE</p><h2>Ready to fill</h2></div><span class="status"><i></i> 86% complete</span></div><div class="profile-progress"><i></i></div><div class="profile-list"><p><span>✓</span> Resume attached</p><p><span>✓</span> Portfolio linked</p><p class="warn"><span>!</span> Confirm B.Tech score format</p></div><button class="secondary full" data-view="answers">Complete profile</button></article>
         </section>
       </section>
     </main>
 
-    <dialog id="searchModal"><div class="modal-orbit"></div><button class="close" aria-label="Close">×</button><p class="eyebrow">LIVE PUBLIC FEED</p><h2>Search remote roles</h2><form id="jobSearchForm"><label class="search-label" for="query">Role or skills</label><input id="query" value="machine learning AI data" maxlength="80" /><div class="search-row"><span>Source: <strong>Remotive</strong></span><button class="primary" type="submit">Find openings</button></div></form><p class="source-note">Results are attributed to Remotive and cached for one hour. Open the original posting to apply.</p><div id="jobResults" class="job-results" aria-live="polite"></div></dialog>
+    <dialog id="searchModal"><div class="modal-orbit"></div><button class="close" aria-label="Close">×</button><p class="eyebrow">LIVE PUBLIC FEED</p><h2>Search remote roles</h2><form id="jobSearchForm"><label class="search-label" for="query">Role or skills</label><input id="query" value="machine learning AI data" maxlength="80" /><div class="search-filters"><label>Location<select id="searchLocation"><option value="any">Any</option><option value="remote">Remote</option><option value="bengaluru">Bengaluru / India</option><option value="hybrid">Hybrid</option></select></label><label>Experience<select id="searchExperience"><option value="any">Any</option><option value="internship">Internship</option><option value="fresher">Fresher</option><option value="0-2">0–2 yrs</option></select></label></div><div class="search-row"><span>Source: <strong>Remotive</strong></span><button class="primary" type="submit">Find openings</button></div></form><p class="source-note">Results are attributed to Remotive and cached for one hour. Location and experience narrow the results client-side. Open the original posting to apply.</p><div id="jobResults" class="job-results" aria-live="polite"></div></dialog>
     <script src="app.js"></script>
   </body>
 </html>
