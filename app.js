@@ -26,41 +26,40 @@ document.querySelectorAll('[data-view]').forEach((button) => {
 byId('searchNow').addEventListener('click', () => modal.showModal());
 document.querySelectorAll('.close').forEach((button) => button.addEventListener('click', () => modal.close()));
 
-/* ---------- 2) ORBIT: the globe/orbit scene now turns with the cursor (and with touch-drag on mobile) ---------- */
-(function initOrbitControl() {
-  const scene = byId('orbitalScene');
-  if (!scene) return;
-  const MAX_TILT = 22; // degrees
-  let targetX = 0, targetY = 0, currentX = 0, currentY = 0;
+/* ---------- 2) PLANET: only the planet itself spins (a full, continuous 360°+), driven by cursor or touch drag. The orbit rings keep their own separate animation, untouched. ---------- */
+(function initPlanetSpin() {
+  const planet = document.querySelector('.orbital-inner .planet');
+  if (!planet) return;
 
-  function setTiltFromPoint(clientX, clientY) {
-    const box = scene.getBoundingClientRect();
-    const cx = box.left + box.width / 2;
-    const cy = box.top + box.height / 2;
-    const nx = Math.max(-1, Math.min(1, (clientX - cx) / (window.innerWidth / 2)));
-    const ny = Math.max(-1, Math.min(1, (clientY - cy) / (window.innerHeight / 2)));
-    targetY = nx * MAX_TILT;   // left/right cursor movement -> rotate around Y
-    targetX = -ny * MAX_TILT;  // up/down cursor movement -> rotate around X
+  // A wide, seamlessly-repeating "surface" layer inside the planet — sliding it horizontally
+  // reads as the sphere rotating, while the outer .planet keeps its own float animation untouched.
+  const surface = document.createElement('div');
+  surface.className = 'planet-surface';
+  planet.appendChild(surface);
+
+  let offsetPx = 0;
+  let lastX = null;
+  const IDLE_SPEED = 0.28;      // gentle spin when nobody is interacting
+  const DRAG_SENSITIVITY = 0.55; // how much cursor/touch movement adds to the spin
+
+  function tick() {
+    offsetPx += IDLE_SPEED;
+    surface.style.backgroundPositionX = `${offsetPx}px`;
+    requestAnimationFrame(tick);
   }
+  requestAnimationFrame(tick);
 
-  function raf() {
-    currentX += (targetX - currentX) * 0.08;
-    currentY += (targetY - currentY) * 0.08;
-    scene.style.transform = `rotateX(${currentX.toFixed(2)}deg) rotateY(${currentY.toFixed(2)}deg)`;
-    requestAnimationFrame(raf);
+  function onMove(clientX) {
+    if (lastX !== null) offsetPx += (clientX - lastX) * DRAG_SENSITIVITY;
+    lastX = clientX;
   }
-  requestAnimationFrame(raf);
-
-  window.addEventListener('pointermove', (event) => setTiltFromPoint(event.clientX, event.clientY));
+  window.addEventListener('pointermove', (event) => onMove(event.clientX));
+  window.addEventListener('pointerleave', () => { lastX = null; });
   window.addEventListener('touchmove', (event) => {
     const touch = event.touches[0];
-    if (touch) setTiltFromPoint(touch.clientX, touch.clientY);
+    if (touch) onMove(touch.clientX);
   }, { passive: true });
-  // Also let a direct touch/drag ON the globe itself spin it, for touch-only devices with no mousemove.
-  scene.addEventListener('touchstart', (event) => {
-    const touch = event.touches[0];
-    if (touch) setTiltFromPoint(touch.clientX, touch.clientY);
-  }, { passive: true });
+  window.addEventListener('touchend', () => { lastX = null; });
 })();
 
 document.querySelector('.hero-card').addEventListener('pointermove', (event) => {
@@ -329,14 +328,16 @@ function jobMatchesFilters(job, location, experience) {
 byId('jobSearchForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const output = byId('jobResults');
-  output.innerHTML = '<p class="loading">Searching the public feed…</p>';
+  output.innerHTML = '<p class="loading">Searching Remotive, RemoteOK, Jobicy and Arbeitnow…</p>';
   const location = byId('searchLocation').value;
   const experience = byId('searchExperience').value;
+  const postedWithin = byId('searchPosted').value;
   try {
-    const response = await fetch(`/api/jobs?q=${encodeURIComponent(byId('query').value.trim())}&limit=20`);
+    const response = await fetch(`/api/jobs?q=${encodeURIComponent(byId('query').value.trim())}&limit=30&postedWithin=${encodeURIComponent(postedWithin)}`);
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error);
-    const jobs = (payload.jobs || []).filter((job) => jobMatchesFilters(job, location, experience)).slice(0, 9);
-    output.innerHTML = jobs.length ? jobs.map((job) => `<article class="job-result"><div><p>${escapeHTML(job.company)}</p><h3>${escapeHTML(job.title)}</h3><small>${escapeHTML(job.location)} · ${dateLabel(job.publication_date)} · ${escapeHTML(job.salary)}</small></div><a href="${encodeURI(job.url)}" target="_blank" rel="noreferrer">Open posting ↗</a></article>`).join('') : '<p class="loading">No results for that location/experience combination. Try widening the filters.</p>';
-  } catch (error) { output.innerHTML = `<p class="loading error">${escapeHTML(error.message || 'Unable to reach the public feed.')}</p>`; }
+    if (payload.sources) byId('sourceNote').textContent = payload.attribution;
+    const jobs = (payload.jobs || []).filter((job) => jobMatchesFilters(job, location, experience)).slice(0, 12);
+    output.innerHTML = jobs.length ? jobs.map((job) => `<article class="job-result"><div><p>${escapeHTML(job.company)} <span class="source-tag">${escapeHTML(job.source || '')}</span></p><h3>${escapeHTML(job.title)}</h3><small>${escapeHTML(job.location)} · ${dateLabel(job.publication_date)} · ${escapeHTML(job.salary)}</small></div><a href="${encodeURI(job.url)}" target="_blank" rel="noreferrer">Open posting ↗</a></article>`).join('') : '<p class="loading">No results for that combination of filters. Try widening the location, experience or date range.</p>';
+  } catch (error) { output.innerHTML = `<p class="loading error">${escapeHTML(error.message || 'Unable to reach the public feeds.')}</p>`; }
 });
