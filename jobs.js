@@ -4,7 +4,7 @@ const score = (job, query) => {
   return query.split(/\s+/).filter(Boolean).reduce((total, word) => total + (text.includes(word) ? 1 : 0), 0);
 };
 
-/* ---------- Same free, key-less, real (non-scraped) sources as server.js — keep both in sync. ---------- */
+/* ---------- Same sources and India-scoping logic as server.js — keep both in sync. ---------- */
 
 async function fetchRemotive(query, signal) {
   const upstream = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(query)}&limit=100`, { headers: { accept: 'application/json' }, signal });
@@ -59,28 +59,49 @@ async function fetchArbeitnow(query, signal) {
   }));
 }
 
+async function fetchAdzuna(query, signal, days) {
+  const appId = process.env.ADZUNA_APP_ID;
+  const appKey = process.env.ADZUNA_APP_KEY;
+  if (!appId || !appKey) return [];
+  const maxDaysOld = days ? `&max_days_old=${days}` : '';
+  const upstream = await fetch(`https://api.adzuna.com/v1/api/jobs/in/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=30&what=${encodeURIComponent(query)}${maxDaysOld}&content-type=application/json`, { signal });
+  if (!upstream.ok) throw new Error('adzuna unavailable');
+  const payload = await upstream.json();
+  return (payload.results || []).map((job) => ({
+    id: `adzuna-${job.id}`, title: clean(job.title, 140), company: clean(job.company?.display_name, 100),
+    location: clean(job.location?.display_name || 'India', 100), publication_date: job.created || '',
+    url: job.redirect_url, salary: job.salary_min ? `₹${Math.round(job.salary_min).toLocaleString('en-IN')}–₹${Math.round(job.salary_max || job.salary_min).toLocaleString('en-IN')}` : 'Not disclosed',
+    tags: job.category?.label ? [clean(job.category.label, 30)] : [], source: 'Adzuna', description: job.description || '',
+  }));
+}
+
 const SOURCES = [
-  { name: 'Remotive', run: fetchRemotive },
-  { name: 'RemoteOK', run: fetchRemoteOK },
-  { name: 'Jobicy', run: fetchJobicy },
-  { name: 'Arbeitnow', run: fetchArbeitnow },
+  { name: 'Adzuna', run: (q, signal, days) => fetchAdzuna(q, signal, days) },
+  { name: 'Remotive', run: (q, signal) => fetchRemotive(q, signal) },
+  { name: 'RemoteOK', run: (q, signal) => fetchRemoteOK(q, signal) },
+  { name: 'Jobicy', run: (q, signal) => fetchJobicy(q, signal) },
+  { name: 'Arbeitnow', run: (q, signal) => fetchArbeitnow(q, signal) },
 ];
 const DATE_WINDOW_DAYS = { today: 1, week: 7, month: 30 };
+const INDIA_HINTS = ['india', 'bengaluru', 'bangalore', 'mumbai', 'delhi', 'hyderabad', 'pune', 'chennai', 'noida', 'gurugram', 'gurgaon', 'kolkata', 'ahmedabad'];
+const mentionsIndia = (job) => INDIA_HINTS.some((hint) => `${job.location} ${job.title} ${job.tags.join(' ')} ${job.description || ''}`.toLowerCase().includes(hint));
 
 export default async function handler(request, response) {
   const query = clean(request.query.q || 'machine learning ai data', 80).toLowerCase();
   const limit = Math.min(Math.max(Number(request.query.limit) || 12, 1), 30);
   const postedWithin = request.query.postedWithin || 'any';
+  const country = request.query.country || 'in';
+  const days = DATE_WINDOW_DAYS[postedWithin];
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
-  const settled = await Promise.allSettled(SOURCES.map((s) => s.run(query, controller.signal)));
+  const settled = await Promise.allSettled(SOURCES.map((s) => s.run(query, controller.signal, days)));
   clearTimeout(timeout);
 
   const usedSources = [];
   const merged = [];
   settled.forEach((result, i) => {
-    if (result.status === 'fulfilled') { usedSources.push(SOURCES[i].name); merged.push(...result.value); }
+    if (result.status === 'fulfilled' && result.value.length) { usedSources.push(SOURCES[i].name); merged.push(...result.value); }
   });
 
   if (!merged.length) {
@@ -95,21 +116,29 @@ export default async function handler(request, response) {
     seen.add(key); return true;
   });
 
-  const days = DATE_WINDOW_DAYS[postedWithin];
   const cutoff = days ? Date.now() - days * 86400000 : null;
   const dated = cutoff
     ? deduped.filter((job) => { const t = new Date(job.publication_date).getTime(); return Number.isFinite(t) && t >= cutoff; })
     : deduped;
 
-  const jobs = dated
+  const hasAdzuna = usedSources.includes('Adzuna');
+  let scoped = dated;
+  let indiaFocused = false;
+  if (country === 'in') {
+    const indiaOnly = dated.filter((job) => job.source === 'Adzuna' || mentionsIndia(job));
+    if (indiaOnly.length) { scoped = indiaOnly; indiaFocused = true; }
+  }
+
+  const jobs = scoped
     .map((job) => ({ ...job, relevance: score(job, query) }))
     .sort((a, b) => b.relevance - a.relevance || new Date(b.publication_date) - new Date(a.publication_date))
     .slice(0, limit)
     .map(({ description, ...job }) => job);
 
+  const attribution = indiaFocused
+    ? `India-scoped listings from ${usedSources.join(', ')}${hasAdzuna ? '' : ' — add a free Adzuna API key for much fuller India coverage'}. Open the original posting to apply.`
+    : `Couldn't narrow to India from the free feeds this time, showing the wider remote feed from ${usedSources.join(', ')} instead${hasAdzuna ? '' : ' — add a free Adzuna API key (developer.adzuna.com) for real India-specific listings'}. Open the original posting to apply.`;
+
   response.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=3600');
-  response.status(200).json({
-    jobs, sources: usedSources,
-    attribution: `Live listings from ${usedSources.join(', ')} — each pulled from that board's own public API, not scraped. Open the original posting to apply.`,
-  });
+  response.status(200).json({ jobs, sources: usedSources, indiaFocused, attribution });
 }

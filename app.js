@@ -26,31 +26,50 @@ document.querySelectorAll('[data-view]').forEach((button) => {
 byId('searchNow').addEventListener('click', () => modal.showModal());
 document.querySelectorAll('.close').forEach((button) => button.addEventListener('click', () => modal.close()));
 
-/* ---------- 2) PLANET: only the planet itself spins (a full, continuous 360°+), driven by cursor or touch drag. The orbit rings keep their own separate animation, untouched. ---------- */
-(function initPlanetSpin() {
-  const planet = document.querySelector('.orbital-inner .planet');
-  if (!planet) return;
+/* ---------- 2) PLANET: a genuine 3D-rendered globe (Three.js), not a flat CSS trick — spins a full,
+   continuous 360°+ from cursor drag or touch, with a soft idle spin the rest of the time. The 2D orbit
+   rings around it keep their own separate CSS animation, untouched. ---------- */
+(function initPlanetGlobe() {
+  const host = document.querySelector('.orbital-inner .planet');
+  if (!host || typeof THREE === 'undefined') return; // fail quietly if the CDN script didn't load
 
-  // A wide, seamlessly-repeating "surface" layer inside the planet — sliding it horizontally
-  // reads as the sphere rotating, while the outer .planet keeps its own float animation untouched.
-  const surface = document.createElement('div');
-  surface.className = 'planet-surface';
-  planet.appendChild(surface);
+  const size = host.offsetWidth || 104;
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(size, size);
+  renderer.domElement.style.position = 'absolute';
+  renderer.domElement.style.inset = '0';
+  renderer.domElement.style.borderRadius = '50%';
+  host.appendChild(renderer.domElement);
 
-  let offsetPx = 0;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+  camera.position.set(0, 0, 3.1);
+
+  const globe = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1, 3),
+    new THREE.MeshPhongMaterial({ color: 0x1c6a56, emissive: 0x0c3a30, shininess: 38, flatShading: true }),
+  );
+  scene.add(globe);
+
+  const wire = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.012, 1),
+    new THREE.MeshBasicMaterial({ color: 0x9dffdf, wireframe: true, transparent: true, opacity: 0.22 }),
+  );
+  scene.add(wire);
+
+  scene.add(new THREE.AmbientLight(0x8fe6c9, 0.55));
+  const key = new THREE.DirectionalLight(0xeafff5, 1.1);
+  key.position.set(2.2, 1.6, 2.4);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x2effb3, 0.5);
+  rim.position.set(-2, -1, -1.5);
+  scene.add(rim);
+
   let lastX = null;
-  const IDLE_SPEED = 0.28;      // gentle spin when nobody is interacting
-  const DRAG_SENSITIVITY = 0.55; // how much cursor/touch movement adds to the spin
-
-  function tick() {
-    offsetPx += IDLE_SPEED;
-    surface.style.backgroundPositionX = `${offsetPx}px`;
-    requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
-
+  let spinVelocity = 0.006; // idle auto-spin
   function onMove(clientX) {
-    if (lastX !== null) offsetPx += (clientX - lastX) * DRAG_SENSITIVITY;
+    if (lastX !== null) spinVelocity = (clientX - lastX) * 0.0026;
     lastX = clientX;
   }
   window.addEventListener('pointermove', (event) => onMove(event.clientX));
@@ -60,6 +79,17 @@ document.querySelectorAll('.close').forEach((button) => button.addEventListener(
     if (touch) onMove(touch.clientX);
   }, { passive: true });
   window.addEventListener('touchend', () => { lastX = null; });
+
+  function frame() {
+    globe.rotation.y += spinVelocity;
+    wire.rotation.y += spinVelocity * 1.4;
+    globe.rotation.x = wire.rotation.x = 0.15;
+    // ease back toward a gentle idle spin so a single flick doesn't spin forever
+    spinVelocity += (0.006 - spinVelocity) * 0.02;
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 })();
 
 document.querySelector('.hero-card').addEventListener('pointermove', (event) => {
@@ -309,14 +339,10 @@ byId('saveAnswers').addEventListener('click', () => {
 
 renderAnswers();
 
-/* ---------- 6) LIVE SEARCH MODAL: now with location + experience filters on top of Remotive results ---------- */
+/* ---------- 6) LIVE SEARCH MODAL: India-scoped by default (server-side), with experience + date filters ---------- */
 function jobMatchesFilters(job, location, experience) {
   const text = `${job.location} ${job.title} ${job.tags.join(' ')}`.toLowerCase();
-  if (location !== 'any') {
-    if (location === 'remote' && !text.includes('remote')) return false;
-    if (location === 'bengaluru' && !(text.includes('india') || text.includes('bengaluru') || text.includes('bangalore'))) return false;
-    if (location === 'hybrid' && !text.includes('hybrid')) return false;
-  }
+  if (location === 'remote' && !text.includes('remote')) return false;
   if (experience !== 'any') {
     if (experience === 'internship' && !text.includes('intern')) return false;
     if (experience === 'fresher' && (text.includes('senior') || text.includes('lead'))) return false;
@@ -328,16 +354,17 @@ function jobMatchesFilters(job, location, experience) {
 byId('jobSearchForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const output = byId('jobResults');
-  output.innerHTML = '<p class="loading">Searching Remotive, RemoteOK, Jobicy and Arbeitnow…</p>';
-  const location = byId('searchLocation').value;
+  output.innerHTML = '<p class="loading">Searching Adzuna, Remotive, RemoteOK, Jobicy and Arbeitnow…</p>';
+  const location = byId('searchLocation').value; // 'in' | 'remote' | 'global'
   const experience = byId('searchExperience').value;
   const postedWithin = byId('searchPosted').value;
+  const country = location === 'in' ? 'in' : 'any';
   try {
-    const response = await fetch(`/api/jobs?q=${encodeURIComponent(byId('query').value.trim())}&limit=30&postedWithin=${encodeURIComponent(postedWithin)}`);
+    const response = await fetch(`/api/jobs?q=${encodeURIComponent(byId('query').value.trim())}&limit=30&postedWithin=${encodeURIComponent(postedWithin)}&country=${encodeURIComponent(country)}`);
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error);
-    if (payload.sources) byId('sourceNote').textContent = payload.attribution;
+    if (payload.attribution) byId('sourceNote').textContent = payload.attribution;
     const jobs = (payload.jobs || []).filter((job) => jobMatchesFilters(job, location, experience)).slice(0, 12);
-    output.innerHTML = jobs.length ? jobs.map((job) => `<article class="job-result"><div><p>${escapeHTML(job.company)} <span class="source-tag">${escapeHTML(job.source || '')}</span></p><h3>${escapeHTML(job.title)}</h3><small>${escapeHTML(job.location)} · ${dateLabel(job.publication_date)} · ${escapeHTML(job.salary)}</small></div><a href="${encodeURI(job.url)}" target="_blank" rel="noreferrer">Open posting ↗</a></article>`).join('') : '<p class="loading">No results for that combination of filters. Try widening the location, experience or date range.</p>';
+    output.innerHTML = jobs.length ? jobs.map((job) => `<article class="job-result"><div><p>${escapeHTML(job.company)} <span class="source-tag">${escapeHTML(job.source || '')}</span></p><h3>${escapeHTML(job.title)}</h3><small>${escapeHTML(job.location)} · ${dateLabel(job.publication_date)} · ${escapeHTML(job.salary)}</small></div><a href="${encodeURI(job.url)}" target="_blank" rel="noreferrer">Open posting ↗</a></article>`).join('') : '<p class="loading">No results for that combination of filters. Try widening the region, experience or date range.</p>';
   } catch (error) { output.innerHTML = `<p class="loading error">${escapeHTML(error.message || 'Unable to reach the public feeds.')}</p>`; }
 });
